@@ -1,0 +1,100 @@
+{% extends 'base.html' %}
+
+{% block title %}About Us - Ticketify{% endblock %}
+
+{% block content %}
+<div class="hero-section py-4">
+    <div class="container text-center">
+        <h1 class="fw-bold mb-3">About Ticketify</h1>
+        <p class="lead">Your Trusted Event Ticketing Platform</p>
+    </div>
+</div>
+
+<div class="container my-5">
+    <div class="row mb-5">
+        <div class="col-md-6 mb-4">
+            <h2 class="fw-bold mb-3">Who We Are</h2>
+            <p class="text-muted">
+                Ticketify is a modern, secure, and user-friendly event ticketing platform designed to revolutionize 
+                the way people discover, book, and attend events. We connect event organizers with attendees through 
+                innovative technology and seamless user experience.
+            </p>
+            <p class="text-muted">
+                Founded in 2026, our mission is to make event management effortless for organizers and ticket booking 
+                simple for attendees. We leverage cutting-edge QR code technology to ensure secure, fast, and 
+                contactless event entry.
+            </p>
+        </div>
+        <div class="col-md-6 mb-4">
+            <img src="https://via.placeholder.com/600x400?text=About+Ticketify" alt="About Ticketify" class="img-fluid rounded">
+        </div>
+    </div>
+    
+    <h2 class="fw-bold text-center mb-5">Why Choose Ticketify?</h2>
+    <div class="row g-4 mb-5">
+        <div class="col-md-4">
+            <div class="card h-100 text-center">
+                <div class="card-body">
+                    <i class="bi bi-shield-check" style="font-size: 3rem; color: var(--primary-color);"></i>
+                    <h5 class="fw-bold mt-3">Secure & Reliable</h5>
+                    <p class="text-muted">QR code verification prevents duplicate and fake tickets, ensuring only legitimate attendees enter your event.</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card h-100 text-center">
+                <div class="card-body">
+                    <i class="bi bi-lightning-charge" style="font-size: 3rem; color: var(--success-color);"></i>
+                    <h5 class="fw-bold mt-3">Instant Booking</h5>
+                    <p class="text-muted">Book tickets in seconds and receive them instantly via email with QR codes ready to use.</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card h-100 text-center">
+                <div class="card-body">
+                    <i class="bi bi-graph-up" style="font-size: 3rem; color: var(--warning-color);"></i>
+                    <h5 class="fw-bold mt-3">Real-Time Analytics</h5>
+                    <p class="text-muted">Organizers get real-time insights on ticket sales, attendance, and revenue to make data-driven decisions.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="row mb-5">
+        <div class="col-md-6 mb-4">
+            <h2 class="fw-bold mb-3">For Event Attendees</h2>
+            <ul class="list-unstyled">
+                <li class="mb-2"><i class="bi bi-check-circle-fill text-success me-2"></i> Discover events easily with smart search and filters</li>
+                <li class="mb-2"><i class="bi bi-check-circle-fill text-success me-2"></i> Book tickets securely online in minutes</li>
+                <li class="mb-2"><i class="bi bi-check-circle-fill text-success me-2"></i> Receive unique QR code tickets instantly</li>
+                <li class="mb-2"><i class="bi bi-check-circle-fill text-success me-2"></i> Access tickets anytime from your account</li>
+                <li class="mb-2"><i class="bi bi-check-circle-fill text-success me-2"></i> Fast entry with contactless QR code scanning</li>
+            </ul>
+        </div>
+        <div class="col-md-6 mb-4">
+            <h2 class="fw-bold mb-3">For Event Organizers</h2>
+            <ul class="list-unstyled">
+                <li class="mb-2"><i class="bi bi-check-circle-fill text-primary me-2"></i> Create and manage events effortlessly</li>
+                <li class="mb-2"><i class="bi bi-check-circle-fill text-primary me-2"></i> Set pricing and capacity controls</li>
+                <li class="mb-2"><i class="bi bi-check-circle-fill text-primary me-2"></i> Monitor ticket sales in real-time</li>
+                <li class="mb-2"><i class="bi bi-check-circle-fill text-primary me-2"></i> Validate tickets with QR code scanning</li>
+                <li class="mb-2"><i class="bi bi-check-circle-fill text-primary me-2"></i> Track revenue and attendee analytics</li>
+            </ul>
+        </div>
+    </div>
+    
+    <div class="card bg-primary text-white text-center">
+        <div class="card-body py-5">
+            <h2 class="fw-bold mb-3">Join Thousands of Happy Users</h2>
+            <p class="lead mb-4">Start your event journey with Ticketify today!</p>
+            <a href="{% url 'register' %}" class="btn btn-light btn-lg me-2">
+                <i class="bi bi-person-plus"></i> Sign Up Now
+            </a>
+            <a href="{% url 'events_list' %}" class="btn btn-outline-light btn-lg">
+                <i class="bi bi-search"></i> Browse Events
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}

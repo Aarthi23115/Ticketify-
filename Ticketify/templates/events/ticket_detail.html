@@ -1,0 +1,165 @@
+{% extends 'base.html' %}
+
+{% block title %}Ticket {{ ticket.ticket_id }} - Ticketify{% endblock %}
+
+{% block content %}
+<div class="container my-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header bg-primary text-white text-center py-3">
+                    <h3 class="mb-0"><i class="bi bi-ticket-perforated"></i> Event Ticket</h3>
+                </div>
+                <div class="card-body p-5">
+                    <!-- Ticket Status -->
+                    <div class="text-center mb-4">
+                        {% if ticket.status == 'valid' %}
+                            <span class="badge bg-success" style="font-size: 1.2rem; padding: 0.8rem 1.5rem;">✓ VALID TICKET</span>
+                        {% elif ticket.status == 'used' %}
+                            <span class="badge bg-secondary" style="font-size: 1.2rem; padding: 0.8rem 1.5rem;">USED</span>
+                            <p class="text-muted mt-2">Used on {{ ticket.validated_at|date:"M d, Y - h:i A" }}</p>
+                        {% else %}
+                            <span class="badge bg-danger" style="font-size: 1.2rem; padding: 0.8rem 1.5rem;">CANCELLED</span>
+                        {% endif %}
+                    </div>
+                    
+                    <!-- Dynamic QR Code -->
+                    <div class="qr-code-container mb-4 text-center" style="position:relative;">
+                        <div id="qr-wrapper" style="display:inline-block; position:relative;">
+                            <img id="dynamic-qr" src="" alt="Ticket QR Code" class="img-fluid" style="max-width:300px; border:1px solid #ddd;">
+                            <div id="qr-overlay" style="position:absolute; left:0; top:0; right:0; bottom:0; pointer-events:none; display:flex; align-items:flex-end; justify-content:center;">
+                                <div id="qr-watermark" style="background:rgba(255,255,255,0.35); color:#333; font-size:12px; padding:4px 8px; margin:8px; border-radius:4px; backdrop-filter: blur(2px);">
+                                    Live • <span id="qr-timestamp"></span>
+                                </div>
+                            </div>
+                        </div>
+                        <p class="text-muted small mt-2">This QR refreshes every {{ QR_REFRESH_INTERVAL|default:30 }} seconds. Do not share.</p>
+                    </div>
+
+                    <script>
+                    (function(){
+                        const ticketId = '{{ ticket.ticket_id }}';
+                        const qrImg = document.getElementById('dynamic-qr');
+                        const tsEl = document.getElementById('qr-timestamp');
+                        const refresh = {{ QR_REFRESH_INTERVAL|default:30 }} * 1000;
+
+                        async function fetchQR(){
+                            try{
+                                const endpoint = `/api/qr/generate/${ticketId}/`;
+                                console.log('Fetching QR from:', endpoint);
+                                const res = await fetch(endpoint, { credentials: 'same-origin' });
+                                if(!res.ok) {
+                                    console.error('API returned status:', res.status);
+                                    return;
+                                }
+                                const data = await res.json();
+                                console.log('QR data received:', data ? 'yes' : 'no');
+                                if(data.image_base64){
+                                    qrImg.src = 'data:image/png;base64,' + data.image_base64;
+                                    const now = new Date();
+                                    tsEl.textContent = now.toLocaleTimeString();
+                                    console.log('QR updated at', now.toLocaleTimeString());
+                                }
+                            }catch(e){
+                                console.error('QR fetch error:', e);
+                            }
+                        }
+
+                        // initial fetch and periodic refresh
+                        console.log('QR auto-refresh interval (ms):', refresh);
+                        fetchQR();
+                        setInterval(fetchQR, refresh);
+
+                        // anti-screenshot: discourage right-click/save
+                        qrImg.addEventListener('contextmenu', function(e){ e.preventDefault(); });
+                    })();
+                    </script>
+                    
+                    <!-- Ticket Details -->
+                    <div class="border-top border-bottom py-4 mb-4">
+                        <h4 class="fw-bold mb-3">{{ ticket.event.title }}</h4>
+                        
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <p class="text-muted small mb-1">TICKET ID</p>
+                                <p class="fw-bold">{{ ticket.ticket_id }}</p>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <p class="text-muted small mb-1">BOOKING ID</p>
+                                <p class="fw-bold">{{ ticket.booking.booking_id }}</p>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <p class="text-muted small mb-1">ATTENDEE NAME</p>
+                                <p class="fw-bold">{{ ticket.attendee_name }}</p>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <p class="text-muted small mb-1">EMAIL</p>
+                                <p class="fw-bold">{{ ticket.attendee_email }}</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Event Details -->
+                    <h5 class="fw-bold mb-3">Event Details</h5>
+                    <div class="row mb-4">
+                        <div class="col-md-6 mb-3">
+                            <p class="mb-2">
+                                <i class="bi bi-calendar-event text-primary"></i>
+                                <strong> Date:</strong><br>
+                                {{ ticket.event.event_date|date:"l, F d, Y" }}
+                            </p>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <p class="mb-2">
+                                <i class="bi bi-clock text-primary"></i>
+                                <strong> Time:</strong><br>
+                                {% if ticket.booking.show_time %}{{ ticket.booking.show_time.start_time|time:"h:i A" }}{% elif ticket.event.start_time %}{{ ticket.event.start_time|time:"h:i A" }}{% else %}Multiple shows{% endif %}
+                            </p>
+                        </div>
+                        <div class="col-md-12 mb-3">
+                            <p class="mb-2">
+                                <i class="bi bi-geo-alt-fill text-primary"></i>
+                                <strong> Venue:</strong><br>
+                                {{ ticket.event.venue }}<br>
+                                {{ ticket.event.address }}, {{ ticket.event.city }}
+                            </p>
+                        </div>
+                    </div>
+                    
+                    <!-- Important Notes -->
+                    <div class="alert alert-warning">
+                        <h6 class="fw-bold"><i class="bi bi-exclamation-triangle"></i> Important Notes</h6>
+                        <ul class="mb-0 small">
+                            <li>This ticket is valid for single entry only</li>
+                            <li>Please arrive 15-30 minutes before the event starts</li>
+                            <li>Show this QR code at the entrance for validation</li>
+                            <li>Do not share your ticket QR code with others</li>
+                        </ul>
+                    </div>
+                    
+                    <!-- Actions -->
+                    <div class="text-center mt-4">
+                        <button class="btn btn-primary me-2" onclick="window.print()">
+                            <i class="bi bi-printer"></i> Print Ticket
+                        </button>
+                        <a href="{% url 'event_detail' ticket.event.slug %}" class="btn btn-outline-primary me-2">
+                            <i class="bi bi-info-circle"></i> Event Details
+                        </a>
+                        <a href="{% url 'my_tickets' %}" class="btn btn-outline-secondary">
+                            <i class="bi bi-arrow-left"></i> Back to Tickets
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+@media print {
+    .navbar, .footer, .btn, .alert {
+        display: none !important;
+    }
+}
+</style>
+{% endblock %}
