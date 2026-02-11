@@ -1,0 +1,133 @@
+{% extends 'base.html' %}
+
+{% block title %}Bookings - {{ event.title }}{% endblock %}
+
+{% block content %}
+<div class="container my-5">
+    <div class="mb-4">
+        <a href="{% url 'organizer_dashboard' %}" class="btn btn-outline-secondary mb-3">
+            <i class="bi bi-arrow-left"></i> Back to Dashboard
+        </a>
+        
+        <h2 class="fw-bold"><i class="bi bi-ticket-perforated text-primary"></i> Event Bookings</h2>
+        <h4 class="text-muted">{{ event.title }}</h4>
+    </div>
+    
+    <!-- Statistics -->
+    <div class="row g-4 mb-4">
+        <div class="col-md-3">
+            <div class="stat-card">
+                <i class="bi bi-bag-check text-success"></i>
+                <h3>{{ total_bookings }}</h3>
+                <p class="text-muted mb-0">Total Bookings</p>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-card">
+                <i class="bi bi-ticket text-primary"></i>
+                <h3>{{ tickets_sold }}</h3>
+                <p class="text-muted mb-0">Tickets Sold</p>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-card">
+                <i class="bi bi-currency-rupee text-info"></i>
+                <h3>₹{{ total_revenue|floatformat:2 }}</h3>
+                <p class="text-muted mb-0">Total Revenue</p>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-card">
+                <i class="bi bi-percent text-warning"></i>
+                <h3>{{ event.sales_percentage|floatformat:0 }}%</h3>
+                <p class="text-muted mb-0">Sold</p>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Bookings Table -->
+    <div class="card">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5 class="fw-bold mb-0">All Bookings</h5>
+                <a href="{% url 'validate_ticket' event.slug %}" class="btn btn-success">
+                    <i class="bi bi-qr-code-scan"></i> Validate Tickets
+                </a>
+            </div>
+            
+            {% if page_obj %}
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Booking ID</th>
+                            <th>Customer</th>
+                            <th>Email</th>
+                            <th>Phone</th>
+                            <th>Tickets</th>
+                            <th>Amount</th>
+                            <th>Status</th>
+                            <th>Date</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for booking in page_obj %}
+                        <tr>
+                            <td><span class="badge bg-primary">{{ booking.booking_id }}</span></td>
+                            <td>{{ booking.user.get_full_name|default:booking.user.username }}</td>
+                            <td>{{ booking.email }}</td>
+                            <td>{{ booking.phone }}</td>
+                            <td><strong>{{ booking.quantity }}</strong></td>
+                            <td><strong class="text-success">₹{{ booking.total_amount|floatformat:2 }}</strong></td>
+                            <td>
+                                {% if booking.status == 'confirmed' %}
+                                    <span class="badge bg-success">Confirmed</span>
+                                {% elif booking.status == 'pending' %}
+                                    <span class="badge bg-warning">Pending</span>
+                                {% elif booking.status == 'cancelled' %}
+                                    <span class="badge bg-danger">Cancelled</span>
+                                {% else %}
+                                    <span class="badge bg-secondary">Refunded</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ booking.created_at|date:"M d, Y" }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            
+            <!-- Pagination -->
+            {% if page_obj.has_other_pages %}
+            <nav class="mt-3">
+                <ul class="pagination justify-content-center">
+                    {% if page_obj.has_previous %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ page_obj.previous_page_number }}">Previous</a>
+                    </li>
+                    {% endif %}
+                    
+                    <li class="page-item active">
+                        <span class="page-link">{{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+                    </li>
+                    
+                    {% if page_obj.has_next %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ page_obj.next_page_number }}">Next</a>
+                    </li>
+                    {% endif %}
+                </ul>
+            </nav>
+            {% endif %}
+            
+            {% else %}
+            <div class="text-center py-5">
+                <i class="bi bi-inbox" style="font-size: 4rem; color: var(--muted-color);"></i>
+                <h4 class="mt-3">No Bookings Yet</h4>
+                <p class="text-muted">Bookings will appear here once people start booking tickets</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

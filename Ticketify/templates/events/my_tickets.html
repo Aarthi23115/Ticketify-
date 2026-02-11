@@ -1,0 +1,83 @@
+{% extends 'base.html' %}
+
+{% block title %}My Tickets - Ticketify{% endblock %}
+
+{% block content %}
+<div class="container my-5">
+    <h2 class="fw-bold mb-4"><i class="bi bi-ticket-detailed text-primary"></i> My Tickets</h2>
+    
+    {% if page_obj %}
+    <div class="row g-4">
+        {% for ticket in page_obj %}
+        <div class="col-lg-4 col-md-6">
+            <div class="card h-100 {% if ticket.status == 'used' %}border-success{% elif ticket.status == 'cancelled' %}border-danger{% endif %}">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start mb-3">
+                        <h5 class="fw-bold mb-0">{{ ticket.ticket_id }}</h5>
+                        {% if ticket.status == 'valid' %}
+                            <span class="badge bg-success">Valid</span>
+                        {% elif ticket.status == 'used' %}
+                            <span class="badge bg-secondary">Used</span>
+                        {% else %}
+                            <span class="badge bg-danger">Cancelled</span>
+                        {% endif %}
+                    </div>
+                    
+                    <h6 class="fw-bold text-primary">{{ ticket.event.title }}</h6>
+                    
+                    <p class="text-muted small mb-3">
+                        <i class="bi bi-calendar"></i> {{ ticket.event.event_date|date:"M d, Y" }} {% if ticket.booking.show_time %} - {{ ticket.booking.show_time.start_time|time:"h:i A" }}{% elif ticket.event.start_time %} - {{ ticket.event.start_time|time:"h:i A" }}{% endif %}<br>
+                        <i class="bi bi-geo-alt"></i> {{ ticket.event.venue }}<br>
+                        <i class="bi bi-person"></i> {{ ticket.attendee_name }}
+                    </p>
+                    
+                    {% if ticket.qr_code and ticket.status == 'valid' %}
+                    <div class="text-center mb-3">
+                        <img src="{{ ticket.qr_code.url }}" alt="QR Code" class="img-fluid" style="max-width: 150px;">
+                    </div>
+                    {% endif %}
+                    
+                    <a href="{% url 'ticket_detail' ticket.ticket_id %}" class="btn btn-primary w-100">
+                        <i class="bi bi-eye"></i> View Full Ticket
+                    </a>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    
+    <!-- Pagination -->
+    {% if page_obj.has_other_pages %}
+    <nav class="mt-4">
+        <ul class="pagination justify-content-center">
+            {% if page_obj.has_previous %}
+            <li class="page-item">
+                <a class="page-link" href="?page={{ page_obj.previous_page_number }}">Previous</a>
+            </li>
+            {% endif %}
+            
+            <li class="page-item active">
+                <span class="page-link">{{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+            </li>
+            
+            {% if page_obj.has_next %}
+            <li class="page-item">
+                <a class="page-link" href="?page={{ page_obj.next_page_number }}">Next</a>
+            </li>
+            {% endif %}
+        </ul>
+    </nav>
+    {% endif %}
+    
+    {% else %}
+    <div class="text-center py-5">
+        <i class="bi bi-ticket-perforated" style="font-size: 5rem; color: var(--muted-color);"></i>
+        <h3 class="mt-3">No Tickets Yet</h3>
+        <p class="text-muted">Book tickets for events to see them here</p>
+        <a href="{% url 'events_list' %}" class="btn btn-primary">
+            <i class="bi bi-search"></i> Browse Events
+        </a>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,122 @@
+{% extends 'base.html' %}
+
+{% block title %}Book Tickets - {{ event.title }}{% endblock %}
+
+{% block content %}
+<div class="container my-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-body p-5">
+                    <h2 class="fw-bold mb-4">
+                        <i class="bi bi-ticket-perforated text-primary"></i> Book Tickets
+                    </h2>
+                    
+                    <!-- Event Summary -->
+                    <div class="alert alert-info">
+                        <div class="row">
+                            <div class="col-md-8">
+                                <h5 class="fw-bold">{{ event.title }}</h5>
+                                <p class="mb-1"><i class="bi bi-calendar"></i> {{ event.event_date|date:"F d, Y" }}{% if event.start_time %} - {{ event.start_time|time:"h:i A" }}{% endif %}</p>
+                                <p class="mb-0"><i class="bi bi-geo-alt"></i> {{ event.venue }}, {{ event.city }}</p>
+                            </div>
+                            <div class="col-md-4 text-end">
+                                <h3 class="text-primary fw-bold">₹{{ event.price|floatformat:0 }}</h3>
+                                <p class="text-muted mb-0">per ticket</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Booking Form -->
+                    <form method="POST" id="bookingForm">
+                        {% csrf_token %}
+                        
+                        <div class="mb-4">
+                            <label class="form-label fw-bold">Number of Tickets</label>
+                            {{ form.quantity }}
+                            {% if form.quantity.errors %}
+                            <div class="text-danger small">{{ form.quantity.errors }}</div>
+                            {% endif %}
+                            <small class="text-muted d-block mt-1">
+                                Maximum {{ event.available_tickets }} tickets available
+                            </small>
+                        </div>
+                        
+                        {% if event.event_type == 'movie' %}
+                        <div class="mb-4">
+                            <label class="form-label fw-bold">Show Time</label>
+                            {{ form.show_time }}
+                        </div>
+
+                        <div class="mb-4">
+                            <label class="form-label fw-bold">Select Seats (comma separated)</label>
+                            {{ form.selected_seats }}
+                            <small class="text-muted d-block mt-1">Example: A1,A2</small>
+                        </div>
+                        {% endif %}
+                        
+                        <div class="mb-4">
+                            <label class="form-label fw-bold">Email</label>
+                            {{ form.email }}
+                            {% if form.email.errors %}
+                            <div class="text-danger small">{{ form.email.errors }}</div>
+                            {% endif %}
+                            <small class="text-muted d-block mt-1">
+                                We'll send your tickets to this email
+                            </small>
+                        </div>
+                        
+                        <div class="mb-4">
+                            <label class="form-label fw-bold">Phone Number</label>
+                            {{ form.phone }}
+                            {% if form.phone.errors %}
+                            <div class="text-danger small">{{ form.phone.errors }}</div>
+                            {% endif %}
+                        </div>
+                        
+                        <!-- Order Summary -->
+                        <div class="card bg-light">
+                            <div class="card-body">
+                                <h5 class="fw-bold mb-3">Order Summary</h5>
+                                <div class="d-flex justify-content-between mb-2">
+                                    <span>Ticket Price:</span>
+                                    <span>₹{{ event.price|floatformat:0 }}</span>
+                                </div>
+                                <div class="d-flex justify-content-between mb-2">
+                                    <span>Quantity:</span>
+                                    <span id="quantityDisplay">1</span>
+                                </div>
+                                <hr>
+                                <div class="d-flex justify-content-between">
+                                    <strong>Total Amount:</strong>
+                                    <strong class="text-primary" id="totalAmount">₹{{ event.price|floatformat:0 }}</strong>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="mt-4">
+                            <button type="submit" class="btn btn-primary btn-lg w-100">
+                                <i class="bi bi-check-circle"></i> Confirm Booking
+                            </button>
+                            <a href="{% url 'event_detail' event.slug %}" class="btn btn-outline-secondary w-100 mt-2">
+                                <i class="bi bi-arrow-left"></i> Back to Event
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.getElementById('id_quantity').addEventListener('input', function() {
+    const quantity = parseInt(this.value) || 1;
+    const price = {{ event.price }};
+    const total = quantity * price;
+    
+    document.getElementById('quantityDisplay').textContent = quantity;
+    document.getElementById('totalAmount').textContent = '$' + total.toFixed(2);
+});
+</script>
+{% endblock %}

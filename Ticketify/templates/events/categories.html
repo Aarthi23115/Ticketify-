@@ -1,0 +1,37 @@
+{% extends 'base.html' %}
+
+{% block title %}Event Categories - Ticketify{% endblock %}
+
+{% block content %}
+<div class="hero-section py-4">
+    <div class="container text-center">
+        <h1 class="fw-bold mb-3"><i class="bi bi-grid-fill"></i> Event Categories</h1>
+        <p class="lead">Browse events by category</p>
+    </div>
+</div>
+
+<div class="container my-5">
+    {% if categories %}
+    <div class="row g-4">
+        {% for category in categories %}
+        <div class="col-lg-3 col-md-4 col-sm-6">
+            <a href="{% url 'events_list' %}?category={{ category.id }}" class="text-decoration-none">
+                <div class="card h-100 text-center">
+                    <div class="card-body">
+                        <div style="font-size: 4rem; margin-bottom: 1rem;">{{ category.icon }}</div>
+                        <h5 class="fw-bold mb-2">{{ category.name }}</h5>
+                        <p class="text-muted small">{{ category.description|truncatewords:10 }}</p>
+                        <span class="badge bg-primary">{{ category.events.count }} Events</span>
+                    </div>
+                </div>
+            </a>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="text-center py-5">
+        <p class="text-muted">No categories available</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

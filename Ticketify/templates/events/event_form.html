@@ -1,0 +1,184 @@
+{% extends 'base.html' %}
+
+{% block title %}{% if event %}Edit Event{% else %}Create Event{% endif %} - Ticketify{% endblock %}
+
+{% block content %}
+<div class="container my-5">
+    <div class="row justify-content-center">
+        <div class="col-md-10">
+            <div class="card">
+                <div class="card-body p-5">
+                    <h2 class="fw-bold mb-4">
+                        <i class="bi bi-calendar-plus text-primary"></i> 
+                        {% if event %}Edit Event{% else %}Create New Event{% endif %}
+                    </h2>
+                    
+                    <form method="POST" enctype="multipart/form-data">
+                        {% csrf_token %}
+                        
+                        {% if form.non_field_errors %}
+                        <div class="alert alert-danger">
+                            {{ form.non_field_errors }}
+                        </div>
+                        {% endif %}
+                        
+                        <!-- Basic Information -->
+                        <h5 class="fw-bold mb-3 text-primary">Basic Information</h5>
+                        <div class="row">
+                            <div class="col-md-8 mb-3">
+                                <label class="form-label fw-bold">Event Title *</label>
+                                {{ form.title }}
+                                {% if form.title.errors %}
+                                <div class="text-danger small">{{ form.title.errors }}</div>
+                                {% endif %}
+                            </div>
+                            
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label fw-bold">Slug *</label>
+                                {{ form.slug }}
+                                {% if form.slug.errors %}
+                                <div class="text-danger small">{{ form.slug.errors }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Description *</label>
+                            {{ form.description }}
+                            {% if form.description.errors %}
+                            <div class="text-danger small">{{ form.description.errors }}</div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label fw-bold">Category *</label>
+                                {{ form.category }}
+                                {% if form.category.errors %}
+                                <div class="text-danger small">{{ form.category.errors }}</div>
+                                {% endif %}
+                            </div>
+                            
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label fw-bold">Event Image</label>
+                                {{ form.image }}
+                                {% if form.image.errors %}
+                                <div class="text-danger small">{{ form.image.errors }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        
+                        <hr class="my-4">
+                        
+                        <!-- Location Details -->
+                        <h5 class="fw-bold mb-3 text-primary">Location Details</h5>
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Venue Name *</label>
+                            {{ form.venue }}
+                            {% if form.venue.errors %}
+                            <div class="text-danger small">{{ form.venue.errors }}</div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Full Address *</label>
+                            {{ form.address }}
+                            {% if form.address.errors %}
+                            <div class="text-danger small">{{ form.address.errors }}</div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">City *</label>
+                            {{ form.city }}
+                            {% if form.city.errors %}
+                            <div class="text-danger small">{{ form.city.errors }}</div>
+                            {% endif %}
+                        </div>
+                        
+                        <hr class="my-4">
+                        
+                        <!-- Date and Time -->
+                        <h5 class="fw-bold mb-3 text-primary">Date & Time</h5>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label fw-bold">Event Date *</label>
+                                {{ form.event_date }}
+                                {% if form.event_date.errors %}
+                                <div class="text-danger small">{{ form.event_date.errors }}</div>
+                                {% endif %}
+                            </div>
+                            
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label fw-bold">Start Time (optional for movies)</label>
+                                {{ form.start_time }}
+                                {% if form.start_time.errors %}
+                                <div class="text-danger small">{{ form.start_time.errors }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        
+                        <hr class="my-4">
+                        
+                        <!-- Pricing & Capacity -->
+                        <h5 class="fw-bold mb-3 text-primary">Pricing & Capacity</h5>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label fw-bold">Price per Ticket (₹) *</label>
+                                {{ form.price }}
+                                {% if form.price.errors %}
+                                <div class="text-danger small">{{ form.price.errors }}</div>
+                                {% endif %}
+                                <small class="text-muted">Set to 0 for free events</small>
+                            </div>
+                            
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label fw-bold">Total Tickets *</label>
+                                {{ form.total_tickets }}
+                                {% if form.total_tickets.errors %}
+                                <div class="text-danger small">{{ form.total_tickets.errors }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        
+                        <hr class="my-4">
+                        
+                        <!-- Status -->
+                        <h5 class="fw-bold mb-3 text-primary">Status</h5>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label fw-bold">Publication Status *</label>
+                                {{ form.status }}
+                                {% if form.status.errors %}
+                                <div class="text-danger small">{{ form.status.errors }}</div>
+                                {% endif %}
+                            </div>
+                            
+                            <div class="col-md-6 mb-3">
+                                <div class="form-check mt-4">
+                                    {{ form.is_featured }}
+                                    <label class="form-check-label fw-bold" for="{{ form.is_featured.id_for_label }}">
+                                        {{ form.is_featured.label }}
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <hr class="my-4">
+                        
+                        <!-- Actions -->
+                        <div class="d-flex justify-content-between">
+                            <button type="submit" class="btn btn-primary btn-lg">
+                                <i class="bi bi-check-circle"></i> {% if event %}Update Event{% else %}Create Event{% endif %}
+                            </button>
+                            <a href="{% url 'organizer_dashboard' %}" class="btn btn-outline-secondary btn-lg">
+                                <i class="bi bi-x-circle"></i> Cancel
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

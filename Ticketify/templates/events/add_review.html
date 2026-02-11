@@ -1,0 +1,63 @@
+{% extends 'base.html' %}
+
+{% block title %}{% if existing_review %}Edit Review{% else %}Add Review{% endif %} - {{ event.title }}{% endblock %}
+
+{% block content %}
+<div class="container my-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-body p-5">
+                    <h2 class="fw-bold mb-4">
+                        <i class="bi bi-star text-warning"></i> 
+                        {% if existing_review %}Edit Your Review{% else %}Write a Review{% endif %}
+                    </h2>
+                    
+                    <div class="alert alert-info mb-4">
+                        <h5 class="fw-bold">{{ event.title }}</h5>
+                        <p class="mb-0">
+                            <i class="bi bi-calendar"></i> {{ event.event_date|date:"F d, Y" }} | 
+                            <i class="bi bi-geo-alt"></i> {{ event.venue }}
+                        </p>
+                    </div>
+                    
+                    <form method="POST">
+                        {% csrf_token %}
+                        
+                        <div class="mb-4">
+                            <label class="form-label fw-bold">Rating *</label>
+                            {{ form.rating }}
+                            {% if form.rating.errors %}
+                            <div class="text-danger small">{{ form.rating.errors }}</div>
+                            {% endif %}
+                            <small class="text-muted d-block mt-1">
+                                Rate your experience from 1 (poor) to 5 (excellent)
+                            </small>
+                        </div>
+                        
+                        <div class="mb-4">
+                            <label class="form-label fw-bold">Your Review</label>
+                            {{ form.comment }}
+                            {% if form.comment.errors %}
+                            <div class="text-danger small">{{ form.comment.errors }}</div>
+                            {% endif %}
+                            <small class="text-muted d-block mt-1">
+                                Share your thoughts about the event
+                            </small>
+                        </div>
+                        
+                        <div class="d-flex justify-content-between">
+                            <button type="submit" class="btn btn-primary btn-lg">
+                                <i class="bi bi-check-circle"></i> {% if existing_review %}Update Review{% else %}Submit Review{% endif %}
+                            </button>
+                            <a href="{% url 'event_detail' event.slug %}" class="btn btn-outline-secondary btn-lg">
+                                <i class="bi bi-x-circle"></i> Cancel
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
