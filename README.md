@@ -145,8 +145,7 @@ python manage.py runserver
 Then open <http://127.0.0.1:8000>.
 
 `seed_demo` loads **fictional** demo data: 8 categories, 12 upcoming events (dated from the day you run it), and two accounts, `demo_organizer` and `demo_user`.
-- It prints a random password for both accounts.
-- To choose the password yourself, set the `DEMO_PASSWORD` environment variable first.
+- Each account has its own password: set `DEMO_USER_PASSWORD` and `DEMO_ORGANIZER_PASSWORD` first. Any you leave unset get a random password, printed once.
 - You can safely run it again; it refreshes the event dates.
 
 > **Organizer access:** new sign-ups are attendees. To make an account an organizer, tick *Is organizer* on its user profile in the Django admin.
