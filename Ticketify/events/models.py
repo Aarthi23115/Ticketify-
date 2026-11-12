@@ -432,6 +432,13 @@ class Review(models.Model):
 class TicketScanLog(models.Model):
     """Log each QR scan attempt for auditing and anti-fraud"""
     ticket = models.ForeignKey(Ticket, on_delete=models.CASCADE, related_name='scan_logs')
+    scanner = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='ticket_scan_logs',
+    )
     scanned_at = models.DateTimeField(auto_now_add=True)
     success = models.BooleanField(default=False)
     remote_addr = models.CharField(max_length=100, blank=True, null=True)

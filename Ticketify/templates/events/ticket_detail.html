@@ -24,6 +24,7 @@
                     </div>
                     
                     <!-- Dynamic QR Code -->
+                    {% if ticket.status == 'valid' %}
                     <div class="qr-code-container mb-4 text-center" style="position:relative;">
                         <div id="qr-wrapper" style="display:inline-block; position:relative;">
                             <img id="dynamic-qr" src="" alt="Ticket QR Code" class="img-fluid" style="max-width:300px; border:1px solid #ddd;">
@@ -33,47 +34,65 @@
                                 </div>
                             </div>
                         </div>
-                        <p class="text-muted small mt-2">This QR refreshes every {{ QR_REFRESH_INTERVAL|default:30 }} seconds. Do not share.</p>
+                        <div id="qr-load-status" class="small text-danger mt-2" role="status" aria-live="polite"></div>
+                        <p class="text-muted small mt-2">This is the single QR code for your booking: {{ ticket.booking.quantity }} ticket{{ ticket.booking.quantity|pluralize }}. It refreshes every 30 seconds; screenshots expire.</p>
+                        {% if share_url %}
+                        <a href="{{ share_url }}" class="btn btn-outline-primary" target="_blank" rel="noopener">
+                            <i class="bi bi-share"></i> Share live ticket
+                        </a>
+                        {% endif %}
                     </div>
+                    {% endif %}
 
+                    {% if ticket.status == 'valid' %}
                     <script>
                     (function(){
-                        const ticketId = '{{ ticket.ticket_id }}';
+                        const ticketId = '{{ qr_ticket_id }}';
                         const qrImg = document.getElementById('dynamic-qr');
                         const tsEl = document.getElementById('qr-timestamp');
-                        const refresh = {{ QR_REFRESH_INTERVAL|default:30 }} * 1000;
+                        const statusEl = document.getElementById('qr-load-status');
+                        let refreshTimer;
+
+                        function scheduleRefresh(delay) {
+                            window.clearTimeout(refreshTimer);
+                            refreshTimer = window.setTimeout(fetchQR, delay);
+                        }
 
                         async function fetchQR(){
                             try{
                                 const endpoint = `/api/qr/generate/${ticketId}/`;
-                                console.log('Fetching QR from:', endpoint);
                                 const res = await fetch(endpoint, { credentials: 'same-origin' });
+                                const data = await res.json();
                                 if(!res.ok) {
-                                    console.error('API returned status:', res.status);
+                                    qrImg.hidden = true;
+                                    statusEl.textContent = data.detail || 'QR code unavailable';
+                                    clearInterval(refreshTimer);
                                     return;
                                 }
-                                const data = await res.json();
-                                console.log('QR data received:', data ? 'yes' : 'no');
                                 if(data.image_base64){
                                     qrImg.src = 'data:image/png;base64,' + data.image_base64;
                                     const now = new Date();
                                     tsEl.textContent = now.toLocaleTimeString();
-                                    console.log('QR updated at', now.toLocaleTimeString());
+                                    statusEl.textContent = '';
+                                    scheduleRefresh(Math.max(1000, (data.expires_in - 2) * 1000));
                                 }
-                            }catch(e){
-                                console.error('QR fetch error:', e);
+                            }catch(error){
+                                statusEl.textContent = 'Could not load the current QR code. Check your connection and retry.';
                             }
                         }
 
-                        // initial fetch and periodic refresh
-                        console.log('QR auto-refresh interval (ms):', refresh);
                         fetchQR();
-                        setInterval(fetchQR, refresh);
+                        document.addEventListener('visibilitychange', function () {
+                            if (!document.hidden) {
+                                fetchQR();
+                            }
+                        });
 
                         // anti-screenshot: discourage right-click/save
                         qrImg.addEventListener('contextmenu', function(e){ e.preventDefault(); });
                     })();
                     </script>
+                    {% endif %}
                     
                     <!-- Ticket Details -->
                     <div class="border-top border-bottom py-4 mb-4">

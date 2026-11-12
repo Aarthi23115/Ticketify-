@@ -37,7 +37,31 @@
             <!-- Tickets -->
             <div class="card mb-4">
                 <div class="card-body p-4">
-                    <h4 class="fw-bold mb-3">Your Tickets</h4>
+                    <h4 class="fw-bold mb-3">Booking QR Code</h4>
+                    {% if tickets %}
+                    <div class="text-center mb-4">
+                        <img
+                            class="ticket-live-qr img-fluid"
+                            data-ticket-id="{{ tickets.0.ticket_id }}"
+                            alt="Live QR code for booking {{ booking.booking_id }}"
+                            style="max-width: 240px;"
+                        >
+                        <div class="small text-muted ticket-qr-status" aria-live="polite">Loading current QR code...</div>
+                        <p class="fw-bold mt-2 mb-0">{{ booking.quantity }} ticket{{ booking.quantity|pluralize }} in this booking</p>
+                        {% if share_url %}
+                        <div class="mt-3">
+                            <a href="{{ share_url }}" class="btn btn-outline-primary" target="_blank" rel="noopener">
+                                <i class="bi bi-share"></i> Open ticket sharing link
+                            </a>
+                            <button type="button" class="btn btn-outline-secondary" id="copy-ticket-share-link" data-share-url="{{ share_url }}">
+                                Copy share link
+                            </button>
+                            <div id="share-link-status" class="small text-muted mt-2" role="status" aria-live="polite"></div>
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                    <h5 class="fw-bold mb-3">Ticket details</h5>
                     <div class="row g-3">
                         {% for ticket in tickets %}
                         <div class="col-md-6">
@@ -45,9 +69,6 @@
                                 <div class="card-body text-center">
                                     <h6 class="fw-bold">Ticket #{{ forloop.counter }}</h6>
                                     <p class="text-muted small mb-2">{{ ticket.ticket_id }}</p>
-                                    {% if ticket.qr_code %}
-                                    <img src="{{ ticket.qr_code.url }}" alt="QR Code" class="img-fluid mb-2" style="max-width: 150px;">
-                                    {% endif %}
                                     <a href="{% url 'ticket_detail' ticket.ticket_id %}" class="btn btn-sm btn-primary">
                                         <i class="bi bi-eye"></i> View Full Ticket
                                     </a>
@@ -63,7 +84,7 @@
             <div class="alert alert-info">
                 <h5 class="fw-bold"><i class="bi bi-info-circle"></i> Important Information</h5>
                 <ul class="mb-0">
-                    <li>Save or screenshot your QR code tickets</li>
+                    <li>Save or screenshot the ticket details, but reopen the ticket page for the current QR code. QR screenshots expire when the code refreshes every 30 seconds.</li>
                     <li>Show your ticket QR code at the event entrance</li>
                     <li>Each ticket can only be used once</li>
                     <li>Ticket confirmation has been sent to {{ booking.email }}</li>
@@ -81,4 +102,59 @@
         </div>
     </div>
 </div>
+
+<script>
+(function () {
+    const qrImages = document.querySelectorAll('.ticket-live-qr');
+    const copyButton = document.getElementById('copy-ticket-share-link');
+    if (copyButton) {
+        copyButton.addEventListener('click', async function () {
+            const status = document.getElementById('share-link-status');
+            try {
+                await navigator.clipboard.writeText(copyButton.dataset.shareUrl);
+                status.textContent = 'Sharing link copied.';
+            } catch (error) {
+                status.textContent = 'Copy is unavailable. Open the sharing link and copy it from the address bar.';
+            }
+        });
+    }
+
+    async function refreshQr(image) {
+        const status = image.parentElement.querySelector('.ticket-qr-status');
+        try {
+            const response = await fetch(
+                `/api/qr/generate/${encodeURIComponent(image.dataset.ticketId)}/`,
+                { credentials: 'same-origin' }
+            );
+            const data = await response.json();
+            if (!response.ok) {
+                status.textContent = data.detail || 'The QR code is unavailable. Open the full ticket for details.';
+                image.hidden = true;
+                return;
+            }
+            image.src = 'data:image/png;base64,' + data.image_base64;
+            image.hidden = false;
+            status.textContent = 'Live QR code · refreshes every 30 seconds';
+            window.setTimeout(function () {
+                if (!document.hidden) {
+                    refreshQr(image);
+                } else {
+                    window.addEventListener('visibilitychange', function refreshWhenVisible() {
+                        if (!document.hidden) {
+                            window.removeEventListener('visibilitychange', refreshWhenVisible);
+                            refreshQr(image);
+                        }
+                    });
+                }
+            }, Math.max(1000, (data.expires_in - 2) * 1000));
+        } catch (error) {
+            status.textContent = 'Could not load the current QR code. Open the full ticket to try again.';
+        }
+    }
+
+    qrImages.forEach(function (image) {
+        refreshQr(image);
+    });
+})();
+</script>
 {% endblock %}

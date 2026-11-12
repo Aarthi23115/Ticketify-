@@ -31,12 +31,6 @@
                         <i class="bi bi-person"></i> {{ ticket.attendee_name }}
                     </p>
                     
-                    {% if ticket.qr_code and ticket.status == 'valid' %}
-                    <div class="text-center mb-3">
-                        <img src="{{ ticket.qr_code.url }}" alt="QR Code" class="img-fluid" style="max-width: 150px;">
-                    </div>
-                    {% endif %}
-                    
                     <a href="{% url 'ticket_detail' ticket.ticket_id %}" class="btn btn-primary w-100">
                         <i class="bi bi-eye"></i> View Full Ticket
                     </a>

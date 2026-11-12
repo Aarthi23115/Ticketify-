@@ -116,7 +116,7 @@ document.getElementById('id_quantity').addEventListener('input', function() {
     const total = quantity * price;
     
     document.getElementById('quantityDisplay').textContent = quantity;
-    document.getElementById('totalAmount').textContent = '$' + total.toFixed(2);
+    document.getElementById('totalAmount').textContent = '₹' + total.toFixed(2);
 });
 </script>
 {% endblock %}
