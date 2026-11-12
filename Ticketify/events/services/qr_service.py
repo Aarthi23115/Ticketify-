@@ -8,13 +8,25 @@ from io import BytesIO
 from django.conf import settings
 from django.utils import timezone as dj_timezone
 from django.core.cache import cache
+from django.core import signing
 import qrcode
 
 
-def _time_window(ts=None, interval=None):
-    interval = interval or settings.QR_REFRESH_INTERVAL
-    ts = ts or int(time.time())
-    return int(ts // interval) * interval
+TICKET_SHARE_SALT = 'events.ticket-share'
+
+
+def make_share_token(ticket_id):
+    return signing.dumps({'ticket_id': ticket_id}, salt=TICKET_SHARE_SALT)
+
+
+def verify_share_token(token):
+    try:
+        payload = signing.loads(token, salt=TICKET_SHARE_SALT)
+    except (signing.BadSignature, TypeError, ValueError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+    return payload.get('ticket_id')
 
 
 def _sign_payload(payload: str, secret: str) -> str:
@@ -23,16 +35,18 @@ def _sign_payload(payload: str, secret: str) -> str:
 
 
 def make_token(ticket, now_ts=None):
-    """Create a signed token for the ticket for the current time window.
+    """Create a signed token for the ticket at its generation time.
     The token contains a JSON payload and HMAC signature then base64 encoded.
     """
-    secret = ticket.qr_secret or settings.QR_SIGNING_SECRET
-    window_ts = _time_window(now_ts)
+    if not ticket.qr_secret:
+        ticket.qr_secret = hashlib.sha256(f"{ticket.ticket_id}{settings.QR_SIGNING_SECRET}".encode('utf-8')).hexdigest()
+    secret = ticket.qr_secret
+    generated_at = int(time.time() if now_ts is None else now_ts)
 
     payload = {
         'ticket_id': ticket.ticket_id,
         'event_id': ticket.event.id,
-        'ts': window_ts,
+        'ts': generated_at,
     }
     payload_json = json.dumps(payload, separators=(',', ':'))
     sig = _sign_payload(payload_json, secret)
@@ -41,14 +55,11 @@ def make_token(ticket, now_ts=None):
     token = base64.urlsafe_b64encode(blob.encode('utf-8')).decode('utf-8')
 
     # store temporary token in cache to help prevent replay and allow quick revocation
-    cache_key = f'qr_token:{ticket.ticket_id}:{window_ts}'
+    cache_key = f'qr_token:{ticket.ticket_id}:{generated_at}'
     cache.set(cache_key, True, timeout=settings.QR_REFRESH_INTERVAL + settings.QR_LEEWAY_SECONDS)
 
     # update ticket's last generated time
     ticket.last_qr_generated_at = dj_timezone.now()
-    if not ticket.qr_secret:
-        # if ticket has no per-ticket secret, set one derived from settings secret
-        ticket.qr_secret = hashlib.sha256(f"{ticket.ticket_id}{settings.QR_SIGNING_SECRET}".encode('utf-8')).hexdigest()
     ticket.save(update_fields=['last_qr_generated_at', 'qr_secret'])
 
     return token
@@ -80,8 +91,26 @@ def verify_token(token: str, leeway=None):
         raise ValueError('Invalid token format')
 
     ticket_id = payload.get('ticket_id')
-    window_ts = int(payload.get('ts'))
+    generated_at = int(payload.get('ts'))
 
     # Try to reconstruct secret: first check ticket-specific secret from cache/db
     # The caller should fetch the ticket and pass its secret if available. For now, return payload and sig for caller to verify.
     return payload, sig
+
+
+def verify_ticket_signature(ticket, payload, signature, timestamp):
+    """Check that a parsed QR payload belongs to this ticket and is correctly signed."""
+    if (
+        str(payload.get('ticket_id')) != ticket.ticket_id
+        or str(payload.get('event_id')) != str(ticket.event_id)
+    ):
+        return False
+
+    secret = ticket.qr_secret or settings.QR_SIGNING_SECRET
+    payload_json = json.dumps({
+        'ticket_id': ticket.ticket_id,
+        'event_id': ticket.event_id,
+        'ts': timestamp,
+    }, separators=(',', ':'))
+    expected_signature = _sign_payload(payload_json, secret)
+    return hmac.compare_digest(expected_signature, signature)

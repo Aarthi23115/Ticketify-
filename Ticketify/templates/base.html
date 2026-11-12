@@ -203,9 +203,13 @@
                             <ul class="dropdown-menu dropdown-menu-end">
                                 <li><a class="dropdown-item" href="{% url 'my_bookings' %}"><i class="bi bi-bag-check"></i> My Bookings</a></li>
                                 <li><a class="dropdown-item" href="{% url 'my_tickets' %}"><i class="bi bi-ticket-detailed"></i> My Tickets</a></li>
-                                {% if user.profile.is_organizer %}
+                                {% if user.is_superuser %}
                                     <li><hr class="dropdown-divider"></li>
-                                    <li><a class="dropdown-item" href="{% url 'organizer_dashboard' %}"><i class="bi bi-speedometer2"></i> Organizer Dashboard</a></li>
+                                    <li><a class="dropdown-item" href="{% url 'owner_dashboard' %}"><i class="bi bi-speedometer2"></i> Owner Dashboard</a></li>
+                                    <li><a class="dropdown-item" href="{% url 'event_scanner' %}"><i class="bi bi-qr-code-scan"></i> Event Scanner</a></li>
+                                {% elif user.profile.is_organizer %}
+                                    <li><hr class="dropdown-divider"></li>
+                                    <li><a class="dropdown-item" href="{% url 'event_scanner' %}"><i class="bi bi-qr-code-scan"></i> Event Scanner</a></li>
                                 {% endif %}
                                 <li><hr class="dropdown-divider"></li>
                                 <li><a class="dropdown-item" href="{% url 'logout' %}"><i class="bi bi-box-arrow-right"></i> Logout</a></li>
@@ -269,11 +273,16 @@
                 <div class="col-md-4 mb-4">
                     <h5>For Organizers</h5>
                     <ul class="list-unstyled">
-                        {% if user.is_authenticated and user.profile.is_organizer %}
-                            <li><a href="{% url 'organizer_dashboard' %}">Dashboard</a></li>
+                        {% if user.is_authenticated and user.is_superuser %}
+                            <li><a href="{% url 'owner_dashboard' %}">Owner Dashboard</a></li>
+                            <li><a href="{% url 'event_scanner' %}">Event Scanner</a></li>
+                        {% elif user.is_authenticated and user.profile.is_organizer %}
+                            <li><a href="{% url 'event_scanner' %}">Event Scanner</a></li>
                             <li><a href="{% url 'create_event' %}">Create Event</a></li>
+                        {% elif user.is_authenticated %}
+                            <li><span class="text-muted">Organizer access is assigned by the site owner.</span></li>
                         {% else %}
-                            <li><a href="{% url 'register' %}">Become an Organizer</a></li>
+                            <li><a href="{% url 'register' %}">Create an account</a></li>
                         {% endif %}
                         <li><a href="#">Help Center</a></li>
                     </ul>

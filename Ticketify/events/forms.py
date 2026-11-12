@@ -22,10 +22,6 @@ class UserRegistrationForm(UserCreationForm):
         'class': 'form-control',
         'placeholder': 'Phone (Optional)'
     }))
-    is_organizer = forms.BooleanField(required=False, widget=forms.CheckboxInput(attrs={
-        'class': 'form-check-input'
-    }), label='Register as Event Organizer')
-    
     class Meta:
         model = User
         fields = ['username', 'first_name', 'last_name', 'email', 'password1', 'password2']
@@ -52,7 +48,6 @@ class UserRegistrationForm(UserCreationForm):
             # Update profile
             profile = user.profile
             profile.phone = self.cleaned_data.get('phone', '')
-            profile.is_organizer = self.cleaned_data.get('is_organizer', False)
             profile.save()
         
         return user

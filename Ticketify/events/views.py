@@ -1,16 +1,28 @@
 from django.shortcuts import render, redirect, get_object_or_404
+from django.http import Http404
+from django.urls import reverse
+from django.conf import settings
 from django.contrib.auth import login, authenticate, logout
+from django.contrib.auth.models import User
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
+from django.db import transaction
 from django.db.models import Q, Count, Avg
 from django.utils import timezone
-from django.http import JsonResponse, HttpResponse
+from django.utils.http import url_has_allowed_host_and_scheme
+from django.http import JsonResponse, HttpResponse, HttpResponseForbidden
 from django.core.paginator import Paginator
 from django.views.decorators.http import require_POST
-from .models import Event, Category, Booking, Ticket, Review, UserProfile, MovieShowTime
+from django.views.decorators.http import require_GET
+from .models import (
+    Event, Category, Booking, Ticket, Review, UserProfile, MovieShowTime,
+    TicketScanLog,
+)
 from .forms import (UserRegistrationForm, UserLoginForm, EventForm, 
                     BookingForm, ReviewForm, QRCodeValidationForm)
+from .services.qr_service import make_share_token, verify_token, verify_ticket_signature, verify_share_token
 from datetime import datetime, timedelta
+from urllib.parse import urlencode
 import json
 
 
@@ -48,8 +60,13 @@ def login_view(request):
             if user is not None:
                 login(request, user)
                 messages.success(request, f'Welcome back, {user.username}!')
-                next_url = request.GET.get('next', 'home')
-                return redirect(next_url)
+                next_url = request.GET.get('next', '')
+                # Only follow ?next= if it points back to this site (prevents open redirects)
+                if next_url and url_has_allowed_host_and_scheme(
+                    next_url, allowed_hosts={request.get_host()}, require_https=request.is_secure()
+                ):
+                    return redirect(next_url)
+                return redirect('home')
     else:
         form = UserLoginForm()
     
@@ -312,11 +329,16 @@ def book_ticket_view(request, slug):
 def booking_confirmation_view(request, booking_id):
     """Booking confirmation page"""
     booking = get_object_or_404(Booking, booking_id=booking_id, user=request.user)
-    tickets = booking.tickets.all()
-    
+    tickets = booking.tickets.order_by('pk')
+    qr_ticket = tickets.first()
+
     context = {
         'booking': booking,
         'tickets': tickets,
+        'share_url': request.build_absolute_uri(
+            reverse('ticket_share', kwargs={'share_token': make_share_token(qr_ticket.ticket_id)})
+        ) if qr_ticket else '',
+        'QR_REFRESH_INTERVAL': getattr(__import__('django.conf').conf.settings, 'QR_REFRESH_INTERVAL', 30),
     }
     
     return render(request, 'events/booking_confirmation.html', context)
@@ -358,55 +380,178 @@ def my_tickets_view(request):
 def ticket_detail_view(request, ticket_id):
     """View ticket details with QR code"""
     ticket = get_object_or_404(Ticket, ticket_id=ticket_id, user=request.user)
-    
+    qr_ticket = ticket.booking.tickets.order_by('pk').first()
+
     context = {
         'ticket': ticket,
+        'qr_ticket_id': qr_ticket.ticket_id if qr_ticket else ticket.ticket_id,
+        'share_url': request.build_absolute_uri(
+            reverse('ticket_share', kwargs={'share_token': make_share_token(qr_ticket.ticket_id)})
+        ) if qr_ticket else '',
         'QR_REFRESH_INTERVAL': getattr(__import__('django.conf').conf.settings, 'QR_REFRESH_INTERVAL', 30),
     }
     
     return render(request, 'events/ticket_detail.html', context)
 
 
+def ticket_share_view(request, share_token):
+    """Render a public live ticket view accessed through a signed share link."""
+    ticket_id = verify_share_token(share_token)
+    if not ticket_id:
+        raise Http404('Invalid ticket sharing link.')
+
+    ticket = get_object_or_404(
+        Ticket.objects.select_related('event', 'booking', 'booking__show_time'),
+        ticket_id=ticket_id,
+    )
+    canonical_ticket = ticket.booking.tickets.order_by('pk').first()
+    if not canonical_ticket or canonical_ticket.ticket_id != ticket.ticket_id:
+        raise Http404('Invalid ticket sharing link.')
+
+    booking_tickets = ticket.booking.tickets.all()
+    if booking_tickets.filter(status='used').exists() or booking_tickets.filter(qr_status='USED').exists():
+        share_status = 'used'
+    elif booking_tickets.filter(status='cancelled').exists():
+        share_status = 'cancelled'
+    else:
+        share_status = 'valid'
+
+    return render(request, 'events/ticket_share.html', {
+        'ticket': ticket,
+        'share_token': share_token,
+        'share_status': share_status,
+    })
+
+
+def qr_scan_view(request):
+    """Show signed QR details to scanners; only its event organizer can check it in."""
+    token = request.GET.get('token', '')
+    ticket = None
+    scan_status = 'invalid'
+    can_validate = False
+
+    try:
+        payload, signature = verify_token(token)
+        ticket_id = payload.get('ticket_id')
+        event_id = payload.get('event_id')
+        timestamp = int(payload.get('ts'))
+    except (AttributeError, TypeError, ValueError):
+        payload = None
+        signature = None
+        ticket_id = None
+        event_id = None
+        timestamp = None
+
+    if ticket_id and event_id is not None:
+        ticket = Ticket.objects.select_related(
+            'event', 'booking', 'booking__show_time'
+        ).filter(ticket_id=ticket_id).first()
+        if ticket and str(ticket.event_id) == str(event_id) and verify_ticket_signature(ticket, payload, signature, timestamp):
+            booking_tickets = ticket.booking.tickets.all()
+            if booking_tickets.filter(status='used').exists() or booking_tickets.filter(qr_status='USED').exists():
+                scan_status = 'used'
+            elif booking_tickets.filter(status='cancelled').exists():
+                scan_status = 'cancelled'
+            elif timestamp > int(timezone.now().timestamp()) or int(timezone.now().timestamp()) - timestamp >= settings.QR_REFRESH_INTERVAL:
+                scan_status = 'expired'
+            else:
+                scan_status = 'valid'
+                can_validate = (
+                    request.user.is_authenticated
+                    and (
+                        request.user.is_superuser
+                        or ticket.event.organizer_id == request.user.id
+                    )
+                )
+
+    context = {
+        'ticket': ticket if scan_status != 'invalid' else None,
+        'scan_status': scan_status,
+        'can_validate': can_validate,
+        'organizer_login_url': (
+            f"{reverse('login')}?{urlencode({'next': request.get_full_path()})}"
+            if scan_status == 'valid' and not request.user.is_authenticated
+            else None
+        ),
+        'token': token,
+        'QR_REFRESH_INTERVAL': settings.QR_REFRESH_INTERVAL,
+    }
+    return render(request, 'events/qr_scan_result.html', context)
+
+
 # ============= Event Organizer Views =============
 
 @login_required
-def organizer_dashboard_view(request):
-    """Organizer dashboard"""
-    if not hasattr(request.user, 'profile') or not request.user.profile.is_organizer:
-        messages.error(request, 'You need to be registered as an organizer.')
-        return redirect('home')
-    
-    events = Event.objects.filter(organizer=request.user)
-    
-    # Statistics
-    total_events = events.count()
-    published_events = events.filter(status='published').count()
-    total_bookings = Booking.objects.filter(
-        event__organizer=request.user,
-        status='confirmed'
-    ).count()
-    total_revenue = sum([
-        booking.total_amount for booking in Booking.objects.filter(
-            event__organizer=request.user,
-            status='confirmed'
-        )
-    ])
-    
-    recent_events = events[:5]
-    recent_bookings = Booking.objects.filter(
-        event__organizer=request.user
-    ).order_by('-created_at')[:10]
-    
+def owner_dashboard_view(request):
+    """Show site-wide operational data only to the site superuser."""
+    if not request.user.is_superuser:
+        return HttpResponseForbidden('Owner access is required.')
+
     context = {
-        'total_events': total_events,
-        'published_events': published_events,
-        'total_bookings': total_bookings,
-        'total_revenue': total_revenue,
-        'recent_events': recent_events,
-        'recent_bookings': recent_bookings,
+        'total_events': Event.objects.count(),
+        'total_users': UserProfile.objects.count(),
+        'total_bookings': Booking.objects.filter(status='confirmed').count(),
+        'used_tickets': Ticket.objects.filter(status='used').count(),
+        'recent_scans': _recent_scan_data(),
     }
-    
-    return render(request, 'events/organizer_dashboard.html', context)
+    return render(request, 'events/owner_dashboard.html', context)
+
+
+def _recent_scan_data():
+    return list(
+        TicketScanLog.objects.select_related(
+            'ticket', 'ticket__event', 'ticket__booking', 'scanner'
+        ).order_by('-scanned_at').values(
+            'id',
+            'ticket__ticket_id',
+            'ticket__booking__booking_id',
+            'ticket__event__title',
+            'ticket__status',
+            'scanned_at',
+            'success',
+            'notes',
+            'scanner__username',
+        )[:50]
+    )
+
+
+@login_required
+@require_GET
+def owner_scan_history_view(request):
+    if not request.user.is_superuser:
+        return HttpResponseForbidden('Owner access is required.')
+    scans = [
+        {
+            'id': scan['id'],
+            'ticket_id': scan['ticket__ticket_id'],
+            'booking_id': scan['ticket__booking__booking_id'],
+            'event': scan['ticket__event__title'],
+            'ticket_status': scan['ticket__status'],
+            'scanned_at': scan['scanned_at'].isoformat(),
+            'success': scan['success'],
+            'notes': scan['notes'],
+            'scanner': scan['scanner__username'] or '—',
+        }
+        for scan in _recent_scan_data()
+    ]
+    return JsonResponse({
+        'scans': scans,
+        'statistics': {
+            'total_users': UserProfile.objects.count(),
+            'total_events': Event.objects.count(),
+            'total_bookings': Booking.objects.filter(status='confirmed').count(),
+            'used_tickets': Ticket.objects.filter(status='used').count(),
+        },
+    })
+
+
+@login_required
+def event_scanner_view(request):
+    events = Event.objects.all() if request.user.is_superuser else Event.objects.filter(organizer=request.user)
+    events = events.order_by('event_date', 'title')
+    if not events.exists():
+        return HttpResponseForbidden('You are not authorized to scan tickets for an event.')
+    return render(request, 'events/event_scanner.html', {'events': events})
 
 
 @login_required
@@ -423,7 +568,7 @@ def create_event_view(request):
             event.organizer = request.user
             event.save()
             messages.success(request, 'Event created successfully!')
-            return redirect('organizer_dashboard')
+            return redirect('event_scanner')
     else:
         form = EventForm()
     
@@ -445,7 +590,7 @@ def edit_event_view(request, slug):
         if form.is_valid():
             form.save()
             messages.success(request, 'Event updated successfully!')
-            return redirect('organizer_dashboard')
+            return redirect('event_scanner')
     else:
         form = EventForm(instance=event)
     
@@ -466,7 +611,7 @@ def delete_event_view(request, slug):
     if request.method == 'POST':
         event.delete()
         messages.success(request, 'Event deleted successfully!')
-        return redirect('organizer_dashboard')
+        return redirect('event_scanner')
     
     context = {
         'event': event,
@@ -506,12 +651,14 @@ def event_bookings_view(request, slug):
 @login_required
 def validate_ticket_view(request, slug):
     """Validate tickets using QR code"""
-    event = get_object_or_404(Event, slug=slug, organizer=request.user)
+    authorized_events = Event.objects.all() if request.user.is_superuser else Event.objects.filter(organizer=request.user)
+    event = get_object_or_404(authorized_events, slug=slug)
     
     if request.method == 'POST':
         form = QRCodeValidationForm(request.POST)
         if form.is_valid():
             verification_code = form.cleaned_data['verification_code']
+            ticket_validation_result = None
             
             try:
                 ticket = Ticket.objects.get(
@@ -520,17 +667,37 @@ def validate_ticket_view(request, slug):
                 )
                 
                 if ticket.status == 'used':
-                    messages.warning(request, f'Ticket {ticket.ticket_id} has already been used on {ticket.validated_at.strftime("%Y-%m-%d %H:%M")}')
+                    ticket_validation_result = 'used'
+                    messages.warning(request, f'Ticket {ticket.ticket_id} has already been used on {ticket.validated_at.strftime("%Y-%m-%d %H:%M") if ticket.validated_at else "an earlier scan"}')
                 elif ticket.status == 'cancelled':
+                    ticket_validation_result = 'cancelled'
                     messages.error(request, f'Ticket {ticket.ticket_id} has been cancelled.')
                 elif ticket.status == 'valid':
-                    ticket.mark_as_used(request.user)
-                    messages.success(request, f'✓ Ticket {ticket.ticket_id} validated successfully! Attendee: {ticket.attendee_name}')
+                    with transaction.atomic():
+                        locked_ticket = Ticket.objects.select_for_update().get(pk=ticket.pk)
+                        if locked_ticket.status == 'used' or locked_ticket.qr_status == 'USED':
+                            ticket = locked_ticket
+                            ticket_validation_result = 'used'
+                            messages.warning(request, f'Ticket {ticket.ticket_id} has already been used.')
+                        elif locked_ticket.status == 'valid':
+                            locked_ticket.mark_as_used(request.user)
+                            ticket = locked_ticket
+                            ticket_validation_result = 'validated'
+                            TicketScanLog.objects.create(
+                                ticket=ticket,
+                                scanner=request.user,
+                                success=True,
+                                remote_addr=request.META.get('REMOTE_ADDR'),
+                                device_info=request.META.get('HTTP_USER_AGENT', '')[:256],
+                                notes='Validated by manual verification code',
+                            )
+                            messages.success(request, f'✓ Ticket {ticket.ticket_id} validated successfully! Attendee: {ticket.attendee_name}')
                 
                 context = {
                     'event': event,
                     'form': QRCodeValidationForm(),
                     'ticket': ticket,
+                    'ticket_validation_result': ticket_validation_result,
                 }
                 return render(request, 'events/validate_ticket.html', context)
                 

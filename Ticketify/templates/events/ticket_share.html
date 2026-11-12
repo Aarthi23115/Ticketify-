@@ -1,0 +1,84 @@
+{% extends 'base.html' %}
+
+{% block title %}Shared Ticket - Ticketify{% endblock %}
+
+{% block content %}
+<div class="container my-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8 col-lg-6">
+            <div class="card">
+                <div class="card-body p-4 p-md-5 text-center">
+                    <h1 class="h3 fw-bold mb-2">Shared Event Ticket</h1>
+                    <p class="text-muted">{{ ticket.event.title }}</p>
+
+                    {% if share_status == 'used' %}
+                    <div class="alert alert-warning" role="status">Ticket Already Used.</div>
+                    {% elif share_status == 'cancelled' %}
+                    <div class="alert alert-danger" role="status">Ticket Cancelled.</div>
+                    {% else %}
+                    <div class="alert alert-success" role="status">This booking has {{ ticket.booking.quantity }} ticket{{ ticket.booking.quantity|pluralize }}.</div>
+                    <img id="shared-ticket-qr" class="img-fluid" alt="Live QR code for this booking" style="max-width: 280px;" hidden>
+                    <p id="shared-ticket-qr-status" class="small text-muted mt-2" role="status" aria-live="polite">Loading current QR code...</p>
+                    {% endif %}
+
+                    <div class="text-start border rounded p-3 mt-3">
+                        <p><strong>Event:</strong> {{ ticket.event.title }}</p>
+                        <p><strong>Booking ID:</strong> {{ ticket.booking.booking_id }}</p>
+                        <p><strong>Tickets:</strong> {{ ticket.booking.quantity }}</p>
+                        <p><strong>Ticket ID:</strong> {{ ticket.ticket_id }}</p>
+                        <p class="mb-0"><strong>Attendee:</strong> {{ ticket.attendee_name }}</p>
+                    </div>
+                    <p class="small text-muted mt-3 mb-0">
+                        Show the live QR code to the event organizer. It refreshes every 30 seconds. Once validated, no refreshed QR code can be reused.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if share_status == 'valid' %}
+{{ share_token|json_script:"ticket-share-token" }}
+{{ ticket.ticket_id|json_script:"shared-ticket-id" }}
+<script>
+(function () {
+    const image = document.getElementById('shared-ticket-qr');
+    const status = document.getElementById('shared-ticket-qr-status');
+    const ticketId = JSON.parse(document.getElementById('shared-ticket-id').textContent);
+    const shareToken = JSON.parse(document.getElementById('ticket-share-token').textContent);
+    let refreshTimer;
+
+    async function refreshQr() {
+        try {
+            const endpoint = `/api/qr/generate/${encodeURIComponent(ticketId)}/?share_token=${encodeURIComponent(shareToken)}`;
+            const response = await fetch(endpoint, {credentials: 'same-origin'});
+            const data = await response.json();
+            if (!response.ok) {
+                image.hidden = true;
+                status.textContent = data.detail || 'The live QR code is unavailable.';
+                return;
+            }
+            image.src = 'data:image/png;base64,' + data.image_base64;
+            image.hidden = false;
+            status.textContent = 'Live QR code · refreshes every 30 seconds';
+            window.clearTimeout(refreshTimer);
+            refreshTimer = window.setTimeout(function () {
+                if (!document.hidden) {
+                    refreshQr();
+                }
+            }, Math.max(1000, (data.expires_in - 2) * 1000));
+        } catch (error) {
+            status.textContent = 'Could not load the current QR code. Check your connection and retry.';
+        }
+    }
+
+    refreshQr();
+    document.addEventListener('visibilitychange', function () {
+        if (!document.hidden) {
+            refreshQr();
+        }
+    });
+})();
+</script>
+{% endif %}
+{% endblock %}

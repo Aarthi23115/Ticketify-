@@ -9,13 +9,31 @@ import os
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-your-secret-key-change-in-production'
+# Configuration comes from environment variables (see .env.example).
+# Defaults keep local development working exactly as before.
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.environ.get('DJANGO_DEBUG', 'True').lower() in ('1', 'true', 'yes')
 
-ALLOWED_HOSTS = ['localhost', '127.0.0.1', '*']
+# SECURITY WARNING: keep the secret key used in production secret!
+SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY')
+if not SECRET_KEY:
+    if not DEBUG:
+        raise RuntimeError('DJANGO_SECRET_KEY must be set when DJANGO_DEBUG is False.')
+    SECRET_KEY = 'django-insecure-local-development-only'
+
+# Comma-separated, e.g. "yourname.pythonanywhere.com". In local debug mode any
+# host is allowed so a phone on the same Wi-Fi can open the QR scan link.
+ALLOWED_HOSTS = [h.strip() for h in os.environ.get('DJANGO_ALLOWED_HOSTS', '').split(',') if h.strip()]
+if DEBUG and not ALLOWED_HOSTS:
+    ALLOWED_HOSTS = ['*']
+
+# Comma-separated full origins, e.g. "https://yourname.pythonanywhere.com"
+CSRF_TRUSTED_ORIGINS = [o.strip() for o in os.environ.get('DJANGO_CSRF_TRUSTED_ORIGINS', '').split(',') if o.strip()]
+
+if not DEBUG:
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
 
 
 # Application definition
@@ -143,6 +161,8 @@ import os
 
 # Prefer an explicit QR signing secret from env, fallback to Django SECRET_KEY
 QR_SIGNING_SECRET = os.environ.get('QR_SIGNING_SECRET', SECRET_KEY)
+# Public base URL used in rotating QR links when set (for example, https://tickets.example.com).
+QR_PUBLIC_BASE_URL = os.environ.get('QR_PUBLIC_BASE_URL', '').rstrip('/')
 # QR TTL in seconds (window refresh interval)
 QR_REFRESH_INTERVAL = int(os.environ.get('QR_REFRESH_INTERVAL', 30))
 # Leeway for validation (seconds)

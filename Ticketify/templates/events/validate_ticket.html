@@ -18,13 +18,13 @@
                         {% csrf_token %}
                         
                         <div class="mb-4">
-                            <label class="form-label fw-bold">Scan QR Code or Enter Verification Code</label>
+                            <label class="form-label fw-bold">Enter Verification Code</label>
                             {{ form.verification_code }}
                             {% if form.verification_code.errors %}
                             <div class="text-danger small">{{ form.verification_code.errors }}</div>
                             {% endif %}
                             <small class="text-muted d-block mt-1">
-                                <i class="bi bi-info-circle"></i> Scan the QR code on the ticket or manually enter the verification code
+                                <i class="bi bi-info-circle"></i> You can also scan the attendee's rotating QR code below.
                             </small>
                         </div>
                         
@@ -32,20 +32,30 @@
                             <i class="bi bi-check-circle"></i> Validate Ticket
                         </button>
                     </form>
+
+                    <div class="mb-4">
+                        <h5 class="fw-bold">Scan Rotating QR Code</h5>
+                        <p class="text-muted small">Allow camera access and scan the attendee's latest QR code. Signed QR codes expire after 30 seconds.</p>
+                        <button type="button" class="btn btn-outline-primary mb-3" id="start-qr-scanner">
+                            <i class="bi bi-camera"></i> Start camera scanner
+                        </button>
+                        <div id="qr-reader" class="mb-3"></div>
+                        <div id="qr-scan-result" class="alert d-none" role="status" aria-live="polite"></div>
+                    </div>
                     
                     {% if ticket %}
                     <hr>
                     
                     <!-- Validation Result -->
                     <div class="mt-4">
-                        {% if ticket.status == 'valid' %}
+                        {% if ticket_validation_result == 'validated' %}
                         <div class="alert alert-success">
-                            <h4 class="fw-bold"><i class="bi bi-check-circle-fill"></i> Ticket Validated Successfully!</h4>
+                            <h4 class="fw-bold"><i class="bi bi-check-circle-fill"></i> VALID</h4>
                             <p class="mb-0">Entry granted. Attendee can proceed.</p>
                         </div>
-                        {% elif ticket.status == 'used' %}
+                        {% elif ticket.status == 'used' or ticket_validation_result == 'used' %}
                         <div class="alert alert-warning">
-                            <h4 class="fw-bold"><i class="bi bi-exclamation-triangle-fill"></i> Ticket Already Used!</h4>
+                            <h4 class="fw-bold"><i class="bi bi-exclamation-triangle-fill"></i> ALREADY USED</h4>
                             <p class="mb-0">This ticket was validated on {{ ticket.validated_at|date:"M d, Y - h:i A" }}</p>
                         </div>
                         {% else %}
@@ -85,8 +95,8 @@
                     {% endif %}
                     
                     <div class="text-center mt-4">
-                        <a href="{% url 'organizer_dashboard' %}" class="btn btn-outline-secondary">
-                            <i class="bi bi-arrow-left"></i> Back to Dashboard
+                        <a href="{% url 'event_scanner' %}" class="btn btn-outline-secondary">
+                            <i class="bi bi-arrow-left"></i> Back to Event Scanner
                         </a>
                         <a href="{% url 'event_bookings' event.slug %}" class="btn btn-outline-primary">
                             <i class="bi bi-list"></i> View All Bookings
@@ -101,10 +111,10 @@
                     <h5 class="fw-bold mb-3"><i class="bi bi-info-circle"></i> Validation Instructions</h5>
                     <ol>
                         <li>Ask the attendee to show their ticket QR code</li>
-                        <li>Use a QR code scanner app or manually enter the verification code</li>
+                        <li>Use the camera scanner above for rotating QR codes, or manually enter the verification code</li>
                         <li>Click "Validate Ticket" to check the status</li>
                         <li>If valid, the ticket will be marked as used and entry is granted</li>
-                        <li>Already-used or cancelled tickets will be flagged</li>
+                        <li>Expired, already-used, or cancelled tickets will be flagged</li>
                     </ol>
                 </div>
             </div>
@@ -112,6 +122,7 @@
     </div>
 </div>
 
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script>
 // Auto-submit form when verification code is entered (32 characters for UUID)
 document.getElementById('id_verification_code').addEventListener('input', function(e) {
@@ -122,5 +133,140 @@ document.getElementById('id_verification_code').addEventListener('input', functi
         }, 500);
     }
 });
+
+(function () {
+    const startButton = document.getElementById('start-qr-scanner');
+    const result = document.getElementById('qr-scan-result');
+    const validationUrl = "{% url 'api_qr_validate' %}";
+    const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+    let scanner = null;
+    let scanInProgress = false;
+    let scannerPaused = false;
+
+    function showResult(message, style, ticket) {
+        result.textContent = message;
+        result.className = 'alert alert-' + style;
+        if (ticket) {
+            const details = document.createElement('div');
+            details.className = 'mt-3';
+            [
+                ['Ticket ID', ticket.ticket_id],
+                ['Booking ID', ticket.booking_id],
+                ['Attendee', ticket.attendee_name],
+                ['Email', ticket.attendee_email],
+                ['Event', ticket.event],
+                ['Tickets booked', ticket.tickets_booked],
+                ['Tickets available', ticket.tickets_available],
+                ['Ticket status', ticket.ticket_status],
+                ['Validated at', ticket.validated_at ? new Date(ticket.validated_at).toLocaleString() : 'Not yet used']
+            ].forEach(function (item) {
+                const line = document.createElement('p');
+                line.className = 'mb-1';
+                const label = document.createElement('strong');
+                label.textContent = item[0] + ': ';
+                line.appendChild(label);
+                const value = item[1] === undefined || item[1] === null || item[1] === ''
+                    ? '—'
+                    : String(item[1]);
+                line.appendChild(document.createTextNode(value));
+                details.appendChild(line);
+            });
+            result.appendChild(details);
+        }
+    }
+
+    async function validateScannedToken(scannedData) {
+        // Older rotating QR codes contain the signed token directly.
+        let token = scannedData;
+        if (/^https?:\/\//i.test(scannedData)) {
+            try {
+                const scannedUrl = new URL(scannedData);
+                if (scannedUrl.origin !== window.location.origin || !(
+                    scannedUrl.pathname === '/qr/scan/' ||
+                    scannedUrl.pathname.startsWith('/organizer/event/')
+                )) {
+                    showResult('This QR code is not a Ticketify organizer validation QR code.', 'danger');
+                    return;
+                }
+                token = scannedUrl.searchParams.get('token') || '';
+            } catch (error) {
+                showResult('This QR code contains an invalid validation link.', 'danger');
+                return;
+            }
+        }
+
+        if (!token) {
+            showResult('This QR code does not contain a valid ticket token.', 'danger');
+            return;
+        }
+
+        try {
+            const response = await fetch(validationUrl, {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrfToken
+                },
+                body: JSON.stringify({
+                    token: token,
+                    device_info: navigator.userAgent
+                })
+            });
+            const data = await response.json();
+            if (response.ok) {
+                showResult(data.detail, 'success', data.ticket);
+            } else {
+                const style = data.detail === 'ALREADY USED' || data.detail === 'Ticket Already Used.' ? 'warning' : 'danger';
+                showResult(data.detail || 'Unable to validate this QR code.', style, data.ticket);
+            }
+        } catch (error) {
+            showResult('Unable to contact the ticket validation service. Please try again.', 'danger');
+        }
+    }
+
+    startButton.addEventListener('click', function () {
+        if (scanner && scannerPaused) {
+            scanner.resume();
+            scannerPaused = false;
+            startButton.disabled = true;
+            startButton.textContent = 'Scanning...';
+            result.classList.add('d-none');
+            return;
+        }
+        if (scanner) {
+            return;
+        }
+        if (typeof Html5QrcodeScanner === 'undefined') {
+            showResult('The camera scanner could not be loaded. Please enter the verification code manually.', 'danger');
+            return;
+        }
+
+        scanner = new Html5QrcodeScanner('qr-reader', {
+            fps: 10,
+            qrbox: { width: 250, height: 250 }
+        }, false);
+        scanner.render(async function (decodedText) {
+            if (scanInProgress) {
+                return;
+            }
+            scanInProgress = true;
+            scanner.pause(true);
+            scannerPaused = true;
+            startButton.disabled = false;
+            startButton.textContent = 'Scan next ticket';
+            await validateScannedToken(decodedText);
+            scanInProgress = false;
+        }, function () {});
+        startButton.disabled = true;
+        startButton.textContent = 'Scanning...';
+    });
+
+    const mobileScanToken = new URLSearchParams(window.location.search).get('token');
+    if (mobileScanToken) {
+        showResult('Validating scanned QR code...', 'info');
+        validateScannedToken(mobileScanToken);
+    }
+})();
 </script>
 {% endblock %}

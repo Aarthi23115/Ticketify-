@@ -1,0 +1,118 @@
+{% extends 'base.html' %}
+
+{% block title %}Owner Dashboard - Ticketify{% endblock %}
+
+{% block content %}
+<div class="container my-5">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+        <h1 class="h2 fw-bold mb-0"><i class="bi bi-shield-lock text-primary"></i> Owner Dashboard</h1>
+        <a href="/admin/" class="btn btn-outline-primary">Django Admin</a>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-sm-6 col-lg-3"><div class="stat-card"><h3 data-stat="total_users">{{ total_users }}</h3><p class="text-muted mb-0">Accounts</p></div></div>
+        <div class="col-sm-6 col-lg-3"><div class="stat-card"><h3 data-stat="total_events">{{ total_events }}</h3><p class="text-muted mb-0">Events</p></div></div>
+        <div class="col-sm-6 col-lg-3"><div class="stat-card"><h3 data-stat="total_bookings">{{ total_bookings }}</h3><p class="text-muted mb-0">Confirmed bookings</p></div></div>
+        <div class="col-sm-6 col-lg-3"><div class="stat-card"><h3 data-stat="used_tickets">{{ used_tickets }}</h3><p class="text-muted mb-0">Used tickets</p></div></div>
+    </div>
+
+    <section class="card">
+        <div class="card-body">
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+                <div>
+                    <h2 class="h5 fw-bold mb-1">Live ticket scan history</h2>
+                    <p class="small text-muted mb-0">Latest 50 attempts. Refreshes automatically every 10 seconds.</p>
+                </div>
+                <span id="scan-history-updated" class="small text-muted" role="status" aria-live="polite"></span>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle">
+                    <thead>
+                        <tr>
+                            <th>Scan time</th>
+                            <th>Result</th>
+                            <th>Ticket / Booking</th>
+                            <th>Event</th>
+                            <th>Ticket status</th>
+                            <th>Authorized scanner</th>
+                        </tr>
+                    </thead>
+                    <tbody id="scan-history-body">
+                        {% for scan in recent_scans %}
+                        <tr>
+                            <td>{{ scan.scanned_at|date:"Y-m-d H:i:s" }}</td>
+                            <td>{% if scan.success %}<span class="badge bg-success">VALID</span>{% else %}<span class="badge bg-secondary">{{ scan.notes|default:"INVALID" }}</span>{% endif %}</td>
+                            <td>{{ scan.ticket__ticket_id }}<br><small class="text-muted">{{ scan.ticket__booking__booking_id }}</small></td>
+                            <td>{{ scan.ticket__event__title }}</td>
+                            <td>{{ scan.ticket__status|upper }}</td>
+                            <td>{{ scan.scanner__username|default:"—" }}</td>
+                        </tr>
+                        {% empty %}
+                        <tr id="no-scan-history"><td colspan="6" class="text-center text-muted py-4">No scans have been recorded yet.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <div id="scan-history-error" class="small text-danger" role="status" aria-live="polite"></div>
+        </div>
+    </section>
+</div>
+
+<script>
+(function () {
+    const body = document.getElementById('scan-history-body');
+    const updated = document.getElementById('scan-history-updated');
+    const errorBox = document.getElementById('scan-history-error');
+    const historyUrl = "{% url 'owner_scan_history' %}";
+
+    function cell(row, value) {
+        const td = document.createElement('td');
+        td.textContent = value || '—';
+        row.appendChild(td);
+    }
+
+    async function refreshHistory() {
+        try {
+            const response = await fetch(historyUrl, {credentials: 'same-origin'});
+            if (!response.ok) {
+                throw new Error('Could not refresh scan history.');
+            }
+            const data = await response.json();
+            Object.keys(data.statistics).forEach(function (name) {
+                const counter = document.querySelector('[data-stat="' + name + '"]');
+                if (counter) {
+                    counter.textContent = data.statistics[name];
+                }
+            });
+            body.replaceChildren();
+            if (!data.scans.length) {
+                const row = document.createElement('tr');
+                const empty = document.createElement('td');
+                empty.colSpan = 6;
+                empty.className = 'text-center text-muted py-4';
+                empty.textContent = 'No scans have been recorded yet.';
+                row.appendChild(empty);
+                body.appendChild(row);
+            }
+            data.scans.forEach(function (scan) {
+                const row = document.createElement('tr');
+                cell(row, new Date(scan.scanned_at).toLocaleString());
+                cell(row, scan.success ? 'VALID' : (scan.notes || 'INVALID'));
+                cell(row, scan.ticket_id + ' / ' + scan.booking_id);
+                cell(row, scan.event);
+                cell(row, scan.ticket_status.toUpperCase());
+                cell(row, scan.scanner);
+                body.appendChild(row);
+            });
+            updated.textContent = 'Updated ' + new Date().toLocaleTimeString();
+            errorBox.textContent = '';
+        } catch (error) {
+            errorBox.textContent = error.message;
+        }
+    }
+
+    refreshHistory();
+    window.setInterval(refreshHistory, 10000);
+})();
+</script>
+{% endblock %}
