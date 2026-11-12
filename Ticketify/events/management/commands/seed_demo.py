@@ -7,8 +7,10 @@ Creates (or refreshes) categories, two demo accounts and a set of published
 events whose dates are always in the future relative to the day you run it.
 Safe to run more than once. No real personal data is used.
 
-Demo account password: taken from the DEMO_PASSWORD environment variable,
-otherwise a random one is generated and printed once.
+Passwords (each account has its own, so sharing one never exposes the other):
+  demo_user       DEMO_USER_PASSWORD       (safe to publish for a public demo)
+  demo_organizer  DEMO_ORGANIZER_PASSWORD  (keep private)
+If a variable is not set, a random password is generated and printed once.
 """
 import os
 import secrets
@@ -64,8 +66,15 @@ class Command(BaseCommand):
 
     @transaction.atomic
     def handle(self, *args, **options):
-        password = os.environ.get('DEMO_PASSWORD') or secrets.token_urlsafe(9)
-        generated = not os.environ.get('DEMO_PASSWORD')
+        passwords = {}
+        generated = []
+        for username, *_ in DEMO_USERS:
+            env_name = f'DEMO_{username.split("_", 1)[1].upper()}_PASSWORD'
+            value = os.environ.get(env_name)
+            if not value:
+                value = secrets.token_urlsafe(9)
+                generated.append((username, env_name, value))
+            passwords[username] = value
 
         users = {}
         for username, first, last, is_organizer in DEMO_USERS:
@@ -73,7 +82,7 @@ class Command(BaseCommand):
                 username=username,
                 defaults={'first_name': first, 'last_name': last, 'email': f'{username}@example.com'},
             )
-            user.set_password(password)
+            user.set_password(passwords[username])
             user.save()
             user.profile.is_organizer = is_organizer
             user.profile.save()
@@ -117,6 +126,5 @@ class Command(BaseCommand):
             f'Demo data ready: {len(CATEGORIES)} categories, {len(EVENTS)} upcoming events, '
             f'accounts: {", ".join(users)}'
         ))
-        if generated:
-            self.stdout.write(f'Demo account password (shown once): {password}')
-            self.stdout.write('Set DEMO_PASSWORD to choose your own.')
+        for username, env_name, value in generated:
+            self.stdout.write(f'{username} password (shown once): {value}  (set {env_name} to choose your own)')

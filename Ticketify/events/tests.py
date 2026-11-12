@@ -837,12 +837,19 @@ class SeedDemoCommandTestCase(TestCase):
         from django.core.management import call_command
         from io import StringIO
         import os
-        os.environ['DEMO_PASSWORD'] = 'demo-test-pass-123'
+        os.environ['DEMO_USER_PASSWORD'] = 'public-demo-pass-123'
+        os.environ['DEMO_ORGANIZER_PASSWORD'] = 'private-organizer-pass-456'
         try:
             call_command('seed_demo', stdout=StringIO())
             call_command('seed_demo', stdout=StringIO())
         finally:
-            del os.environ['DEMO_PASSWORD']
+            del os.environ['DEMO_USER_PASSWORD']
+            del os.environ['DEMO_ORGANIZER_PASSWORD']
+        # Each account gets its own password, so publishing one never exposes the other.
+        self.assertTrue(User.objects.get(username='demo_user').check_password('public-demo-pass-123'))
+        organizer = User.objects.get(username='demo_organizer')
+        self.assertTrue(organizer.check_password('private-organizer-pass-456'))
+        self.assertFalse(organizer.check_password('public-demo-pass-123'))
         events = Event.objects.filter(organizer__username='demo_organizer')
         self.assertEqual(events.count(), 12)
         self.assertFalse(events.filter(event_date__lt=timezone.localdate()).exists())
