@@ -828,3 +828,23 @@ class QRValidationAPITestCase(TestCase):
 
 
 # Run tests with: python manage.py test
+
+
+class SeedDemoCommandTestCase(TestCase):
+    """The demo seed creates upcoming published events and is safe to re-run."""
+
+    def test_seed_demo_is_idempotent_and_upcoming(self):
+        from django.core.management import call_command
+        from io import StringIO
+        import os
+        os.environ['DEMO_PASSWORD'] = 'demo-test-pass-123'
+        try:
+            call_command('seed_demo', stdout=StringIO())
+            call_command('seed_demo', stdout=StringIO())
+        finally:
+            del os.environ['DEMO_PASSWORD']
+        events = Event.objects.filter(organizer__username='demo_organizer')
+        self.assertEqual(events.count(), 12)
+        self.assertFalse(events.filter(event_date__lt=timezone.localdate()).exists())
+        self.assertTrue(User.objects.get(username='demo_organizer').profile.is_organizer)
+        self.assertFalse(User.objects.get(username='demo_user').profile.is_organizer)
